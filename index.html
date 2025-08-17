@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bus Sun Side Finder</title>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA2gswqirgeYaI2iKVTwtFILXL3pqoqjZ8&libraries=geometry,places"></script>
+    <script src="https://unpkg.com/suncalc@1.9.0/suncalc.js"></script>
+    <style>
+        /* Base / desktop-first tweaks */
+        :root {
+            --control-width: 320px;
+            --gutter: 12px;
+        }
+
+        html, body {
+            height: 100%;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            min-height: 100vh;
+            margin: 0;
+            padding: 16px;
+            box-sizing: border-box;
+            background: #fafafa;
+            color: #111;
+            -webkit-font-smoothing:antialiased;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+        }
+
+        /* Page container behaviour on wide screens */
+        @media (min-width: 900px) {
+            body {
+                flex-direction: row;
+                align-items: flex-start;
+                padding: 24px;
+                gap: 16px;
+            }
+            #controls {
+                position: relative;
+                width: var(--control-width);
+                flex: 0 0 var(--control-width);
+                margin: 0;
+            }
+            #map {
+                width: calc(100% - var(--control-width) - 32px);
+                height: 80vh;
+                margin-top: 0;
+            }
+        }
+
+        /* Map */
+        #map {
+            height: calc(70vh);
+            width: 100%;
+            margin-top: 10px;
+            max-width: 1200px;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        /* Controls */
+        #controls {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            max-width: var(--control-width);
+            background: rgba(255,255,255,0.95);
+            border-radius: 12px;
+            padding: 12px;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+            box-sizing: border-box;
+        }
+
+        #controls > * {
+          margin: 10px 0;
+        }
+
+        #controls input, #controls button {
+            padding: 12px;
+            font-size: 16px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            background: #fff;
+            width: 100%;
+            box-sizing: border-box;
+            touch-action: manipulation;
+        }
+
+        #routeOptions button {
+            display: block;
+            margin: 6px 0;
+            padding: 10px;
+            cursor: pointer;
+            background: #f6f6f6;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            text-align: left;
+            width: 100%;
+        }
+
+        #result {
+            font-size: 16px;
+            font-weight: 600;
+            margin-top: 8px;
+        }
+
+        /* Mobile-specific behaviour */
+        @media (max-width: 899px) {
+            /* keep page padding smaller on mobile */
+            body {
+                padding: 8px;
+                /* ensure column flow so map can flex-grow */
+                display: flex;
+                flex-direction: column;
+                min-height: 100vh;
+            }
+
+            /* Controls sit in the normal flow (not fixed) so they push the map down */
+            #controls {
+                position: static;    /* <-- changed: no longer fixed */
+                left: auto;
+                right: auto;
+                bottom: auto;
+                z-index: 30;
+                width: 100%;
+                max-width: none;
+                padding: 12px;
+                margin: 0 0 12px 0;   /* give space below controls */
+                background: rgba(255,255,255,0.96);
+                box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+                border-radius: 12px;
+            }
+
+            /* Let the map take remaining vertical space instead of being overlapped */
+            #map {
+                flex: 1 1 auto;
+                min-height: 0; /* allow it to shrink inside the flex container */
+                height: auto;  /* override fixed/calculated heights */
+                margin-top: 0;
+                border-radius: 8px;
+            }
+
+            /* Larger clickable areas on mobile */
+            #controls input, #controls button, #routeOptions button {
+                padding: 14px;
+                font-size: 17px;
+            }
+
+            #routeOptions {
+                max-height: 180px;
+                overflow-y: auto;
+            }
+        }
+
+        /* Tiny screens */
+        @media (max-width: 420px) {
+            #map {
+                height: calc(100vh - 220px);
+            }
+            #controls input, #controls button, #routeOptions button {
+                font-size: 16px;
+                padding: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <input id="start" type="text" placeholder="Start location">
+        <input id="end" type="text" placeholder="End location">
+        <input id="dateTime" type="datetime-local">
+        <button onclick="findBusRoutes()">Find Bus Routes</button>
+        <div id="routeOptions"></div>
+        <div id="result"></div>
+    </div>
+    <div id="map"></div>
+
+    <script>
+        let map, directionsService, directionsRenderer;
+        let currentTravelTime;
+
+        function initMap() {
+            map = new google.maps.Map(document.getElementById("map"), {
+                center: { lat: 37.7749, lng: -122.4194 },
+                zoom: 13
+            });
+            directionsService = new google.maps.DirectionsService();
+            directionsRenderer = new google.maps.DirectionsRenderer({ map: map });
+
+            new google.maps.places.Autocomplete(document.getElementById("start"));
+            new google.maps.places.Autocomplete(document.getElementById("end"));
+        }
+
+        function findBusRoutes() {
+            const start = document.getElementById("start").value;
+            const end = document.getElementById("end").value;
+            currentTravelTime = new Date(document.getElementById("dateTime").value);
+
+            directionsService.route({
+                origin: start,
+                destination: end,
+                travelMode: google.maps.TravelMode.TRANSIT,
+                transitOptions: { modes: ['BUS'], departureTime: currentTravelTime },
+                provideRouteAlternatives: true
+            }, (result, status) => {
+                if (status === 'OK') {
+                    showRouteOptions(result);
+                } else {
+                    alert("Directions request failed: " + status);
+                }
+            });
+        }
+
+        function showRouteOptions(result) {
+            const routes = result.routes;
+            const optionsDiv = document.getElementById("routeOptions");
+            optionsDiv.innerHTML = '<h3>Choose a route:</h3>';
+
+            routes.forEach((route, i) => {
+                const leg = route.legs[0];
+                const btn = document.createElement("button");
+                btn.textContent = `${route.summary || "Bus route"} — ${leg.duration.text}, departs ${leg.departure_time?.text || "?"}`;
+                btn.onclick = () => {
+                    directionsRenderer.setDirections({ ...result, routes: [route] });
+                    runSunCalcOnRoute(route, currentTravelTime);
+                };
+                optionsDiv.appendChild(btn);
+            });
+        }
+
+        function runSunCalcOnRoute(route, travelTime) {
+            const path = [];
+            const leg = route.legs[0];
+            let accumulatedTime = new Date(travelTime);
+
+            leg.steps.forEach(step => {
+                if (step.travel_mode === 'TRANSIT') {
+                    const stepDuration = step.duration.value; // seconds
+                    const poly = google.maps.geometry.encoding.decodePath(step.polyline.points);
+
+                    for (let i = 0; i < poly.length - 1; i++) {
+                        path.push({
+                            start: [poly[i].lat(), poly[i].lng()],
+                            end: [poly[i+1].lat(), poly[i+1].lng()],
+                            duration: stepDuration / (poly.length - 1) // evenly split
+                        });
+                    }
+                } else {
+                    // Walking or waiting segments advance the clock but don't matter for bus sunlight
+                    accumulatedTime = new Date(accumulatedTime.getTime() + step.duration.value * 1000);
+                }
+            });
+
+            const bestSide = weightedSideRecommendation(path, travelTime);
+            document.getElementById("result").innerText = `Recommended Side: ${bestSide}`;
+        }
+
+        function weightedSideRecommendation(segments, startTime) {
+            let leftWeight = 0, rightWeight = 0;
+            let currentTime = new Date(startTime);
+
+            for (const seg of segments) {
+                const bearing = calculateBearing(seg.start, seg.end);
+                const sunPos = SunCalc.getPosition(currentTime, seg.start[0], seg.start[1]);
+                const sunAzimuth = (sunPos.azimuth * 180 / Math.PI + 180) % 360;
+
+                const relativeAngle = ((sunAzimuth - bearing + 360) % 360);
+
+                // FIX: swapped logic from earlier version
+                if (relativeAngle > 90 && relativeAngle < 270) {
+                    rightWeight += seg.duration; // Sun is on left → sit right
+                } else {
+                    leftWeight += seg.duration; // Sun is on right → sit left
+                }
+
+                currentTime = new Date(currentTime.getTime() + seg.duration * 1000);
+            }
+
+            if (leftWeight > rightWeight) return "Left";
+            if (rightWeight > leftWeight) return "Right";
+            return "Either";
+        }
+
+        function calculateBearing(start, end) {
+            const [lat1, lon1] = start.map(deg => deg * Math.PI / 180);
+            const [lat2, lon2] = end.map(deg => deg * Math.PI / 180);
+            const dLon = lon2 - lon1;
+
+            const y = Math.sin(dLon) * Math.cos(lat2);
+            const x = Math.cos(lat1) * Math.sin(lat2) -
+                      Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+            return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+        }
+
+        window.onload = initMap;
+    </script>
+</body>
+</html>
