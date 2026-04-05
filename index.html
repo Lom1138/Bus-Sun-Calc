@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Bus Sun Side Finder</title>
-    <link rel="icon" type="image/x-icon" href="favicon.svg">
     
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA2gswqirgeYaI2iKVTwtFILXL3pqoqjZ8&libraries=geometry,places"></script>
     <script src="https://unpkg.com/suncalc@1.9.0/suncalc.js"></script>
@@ -26,24 +25,20 @@
     <style>
         /* --- Default (Light) Theme --- */
         :root {
-            /* M3 Custom Primary Colors */
             --md-sys-color-primary: #007b8b;
             --md-sys-color-on-primary: #ffffff;
             
-            /* M3 Custom Secondary Colors */
             --md-sys-color-secondary: #d3f7ff;
             --md-sys-color-on-secondary: #001f24;
             --md-sys-color-secondary-container: #d3f7ff;
             --md-sys-color-on-secondary-container: #001f24;
 
-            /* Surface and background colors */
             --md-sys-color-surface: #fdfdfd;
             --md-sys-color-surface-container: #eff4f4;
 
-            /* Text, Icon, and Border Tokens */
-            --md-sys-color-on-surface: #191c1d; /* Main text */
-            --md-sys-color-on-surface-variant: #3f484a; /* Labels and Icons */
-            --md-sys-color-outline: #6f797a; /* Input borders */
+            --md-sys-color-on-surface: #191c1d;
+            --md-sys-color-on-surface-variant: #3f484a;
+            --md-sys-color-outline: #6f797a;
 
             --control-width: 400px;
             --text-color: rgba(0, 0, 0, 0.87);
@@ -54,8 +49,7 @@
         /* --- Dark Theme --- */
         @media (prefers-color-scheme: dark) {
             :root {
-                /* User Requested Dark Colors */
-                --md-sys-color-primary: #00a5bb;
+                --md-sys-color-primary: #007786;
                 --md-sys-color-on-primary: #ffffff;
                 
                 --md-sys-color-secondary: #003f4d;
@@ -63,14 +57,12 @@
                 --md-sys-color-secondary-container: #003f4d;
                 --md-sys-color-on-secondary-container: #d3f7ff;
 
-                /* Dark surfaces */
                 --md-sys-color-surface: #1e1e1e;
                 --md-sys-color-surface-container: #121212;
 
-                /* Inverted Text, Icon, and Border Tokens for Dark Mode */
-                --md-sys-color-on-surface: #e1e3e3; /* Light text */
-                --md-sys-color-on-surface-variant: #bfc8ca; /* Light labels and icons */
-                --md-sys-color-outline: #899294; /* Lighter input borders */
+                --md-sys-color-on-surface: #e1e3e3;
+                --md-sys-color-on-surface-variant: #bfc8ca;
+                --md-sys-color-outline: #899294;
 
                 --text-color: #e2e2e2;
                 --pill-border: #444444;
@@ -109,6 +101,38 @@
         md-filled-tonal-button.route-btn {
             --md-filled-tonal-button-container-height: auto;
             padding-top: 10px; padding-bottom: 10px; margin-bottom: 8px; text-align: left;
+        }
+
+        /* --- Google Maps Autocomplete Material 3 Overrides --- */
+        .pac-container {
+            background-color: var(--md-sys-color-surface);
+            border: 1px solid var(--pill-border);
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.08);
+            font-family: 'Roboto', system-ui, sans-serif;
+            margin-top: 4px;
+            padding: 8px 0;
+            z-index: 9999;
+        }
+        .pac-item {
+            padding: 10px 16px;
+            cursor: pointer;
+            border-top: none;
+            color: var(--md-sys-color-on-surface-variant);
+            transition: background-color 0.2s ease;
+        }
+        .pac-item:hover {
+            background-color: var(--md-sys-color-surface-container);
+        }
+        .pac-item-query {
+            font-size: 16px;
+            color: var(--md-sys-color-on-surface);
+        }
+        /* Hide the default Google logo on dark mode to prevent ugly white box */
+        @media (prefers-color-scheme: dark) {
+            .pac-logo:after {
+                display: none;
+            }
         }
 
         /* --- Desktop Layout --- */
@@ -196,7 +220,12 @@
                 </md-icon-button>
             </div>
 
-            <md-outlined-text-field id="dateTime" type="datetime-local" label="Departure Time" class="w-100"></md-outlined-text-field>
+            <div class="input-row">
+                <md-outlined-text-field id="dateTime" type="datetime-local" label="Departure Time" class="flex-input"></md-outlined-text-field>
+                <md-icon-button onclick="setCurrentTime()" title="Set to Current Time">
+                    <md-icon>schedule</md-icon>
+                </md-icon-button>
+            </div>
 
             <md-filled-button class="w-100" id="findBtn">Find Bus Routes</md-filled-button>
 
@@ -223,7 +252,6 @@
         let map, directionsService, directionsRenderer, geocoder;
         let currentTravelTime;
 
-        // Standard Google Maps dark theme JSON
         const darkMapStyle = [
             { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
             { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
@@ -246,17 +274,15 @@
         ];
 
         function initMap() {
-            // Check if the user's OS is using dark mode
             const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
 
             map = new google.maps.Map(document.getElementById("map"), {
                 center: { lat: 37.7749, lng: -122.4194 },
                 zoom: 13,
                 mapTypeControl: false,
-                styles: prefersDark ? darkMapStyle : [] // Apply dark map if OS is dark
+                styles: prefersDark ? darkMapStyle : [] 
             });
 
-            // Listen for system theme changes in real-time
             window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
                 map.setOptions({ styles: event.matches ? darkMapStyle : [] });
             });
@@ -314,7 +340,14 @@
             }
         }
 
-        // Drag to Resize Feature
+        // --- NEW: Function to set current time formatting for datetime-local ---
+        function setCurrentTime() {
+            const now = new Date();
+            const offset = now.getTimezoneOffset() * 60000; // Get local timezone offset in ms
+            const localISOTime = (new Date(now - offset)).toISOString().slice(0, 16); // Format to YYYY-MM-DDThh:mm
+            document.getElementById('dateTime').value = localISOTime;
+        }
+
         const resizer = document.getElementById('resizer');
         let isResizing = false;
 
@@ -339,7 +372,6 @@
             }
         });
 
-        // Mobile Map Toggle Feature
         const toggleMapBtn = document.getElementById('toggleMapBtn');
         const toggleMapIcon = document.getElementById('toggleMapIcon');
         const toggleMapText = document.getElementById('toggleMapText');
@@ -397,9 +429,15 @@
 
             routes.forEach((route, i) => {
                 const leg = route.legs[0];
+
+                // --- NEW: Extracting the actual bus number from the transit steps ---
+                const transitSteps = leg.steps.filter(step => step.travel_mode === 'TRANSIT');
+                const busNumbers = transitSteps.map(step => step.transit.line.short_name || step.transit.line.name).join(' -> ');
+                const routeName = busNumbers ? `Bus ${busNumbers}` : (route.summary || "Bus route");
+
                 const btn = document.createElement("md-filled-tonal-button");
                 btn.className = "w-100 route-btn";
-                btn.innerHTML = `${route.summary || "Bus route"} — ${leg.duration.text}, departs ${leg.departure_time?.text || "?"}`;
+                btn.innerHTML = `${routeName} — ${leg.duration.text}, departs ${leg.departure_time?.text || "?"}`;
 
                 btn.addEventListener('click', () => {
                     directionsRenderer.setDirections({ ...result, routes: [route] });
