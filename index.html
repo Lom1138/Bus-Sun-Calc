@@ -1,204 +1,376 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Bus Sun Side Finder</title>
+    <link rel="icon" type="image/x-icon" href="favicon.svg">
+    
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA2gswqirgeYaI2iKVTwtFILXL3pqoqjZ8&libraries=geometry,places"></script>
     <script src="https://unpkg.com/suncalc@1.9.0/suncalc.js"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
+    
+    <script type="importmap">
+      {
+        "imports": {
+          "@material/web/": "https://esm.run/@material/web/"
+        }
+      }
+    </script>
+    <script type="module">
+      import '@material/web/all.js';
+    </script>
+
     <style>
-        /* Base / desktop-first tweaks */
+        /* --- Default (Light) Theme --- */
         :root {
-            --control-width: 320px;
-            --gutter: 12px;
+            /* M3 Custom Primary Colors */
+            --md-sys-color-primary: #007b8b;
+            --md-sys-color-on-primary: #ffffff;
+            
+            /* M3 Custom Secondary Colors */
+            --md-sys-color-secondary: #d3f7ff;
+            --md-sys-color-on-secondary: #001f24;
+            --md-sys-color-secondary-container: #d3f7ff;
+            --md-sys-color-on-secondary-container: #001f24;
+
+            /* Surface and background colors */
+            --md-sys-color-surface: #fdfdfd;
+            --md-sys-color-surface-container: #eff4f4;
+
+            /* Text, Icon, and Border Tokens */
+            --md-sys-color-on-surface: #191c1d; /* Main text */
+            --md-sys-color-on-surface-variant: #3f484a; /* Labels and Icons */
+            --md-sys-color-outline: #6f797a; /* Input borders */
+
+            --control-width: 400px;
+            --text-color: rgba(0, 0, 0, 0.87);
+            --pill-border: #dcdcdc;
+            --map-bg: #e0e0e0;
+        }
+
+        /* --- Dark Theme --- */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                /* User Requested Dark Colors */
+                --md-sys-color-primary: #00a5bb;
+                --md-sys-color-on-primary: #ffffff;
+                
+                --md-sys-color-secondary: #003f4d;
+                --md-sys-color-on-secondary: #ffffff;
+                --md-sys-color-secondary-container: #003f4d;
+                --md-sys-color-on-secondary-container: #d3f7ff;
+
+                /* Dark surfaces */
+                --md-sys-color-surface: #1e1e1e;
+                --md-sys-color-surface-container: #121212;
+
+                /* Inverted Text, Icon, and Border Tokens for Dark Mode */
+                --md-sys-color-on-surface: #e1e3e3; /* Light text */
+                --md-sys-color-on-surface-variant: #bfc8ca; /* Light labels and icons */
+                --md-sys-color-outline: #899294; /* Lighter input borders */
+
+                --text-color: #e2e2e2;
+                --pill-border: #444444;
+                --map-bg: #242f3e;
+            }
         }
 
         html, body {
             height: 100%;
-        }
-
-        body {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: flex-start;
-            min-height: 100vh;
             margin: 0;
-            padding: 16px;
+            padding: 0;
             box-sizing: border-box;
-            background: #fafafa;
-            color: #111;
-            -webkit-font-smoothing:antialiased;
-            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+            background: var(--md-sys-color-surface-container);
+            color: var(--text-color);
+            -webkit-font-smoothing: antialiased;
+            font-family: 'Roboto', system-ui, sans-serif;
         }
 
-        /* Page container behaviour on wide screens */
-        @media (min-width: 900px) {
-            body {
-                flex-direction: row;
-                align-items: flex-start;
-                padding: 24px;
-                gap: 16px;
-            }
-            #controls {
-                position: relative;
-                width: var(--control-width);
-                flex: 0 0 var(--control-width);
-                margin: 0;
-            }
-            #map {
-                width: calc(100% - var(--control-width) - 32px);
-                height: 80vh;
-                margin-top: 0;
-            }
+        .panel-title {
+            margin-top: 0;
+            margin-bottom: 24px;
+            font-weight: 500;
+            font-size: 1.5rem;
+            color: var(--md-sys-color-primary);
         }
 
-        /* Map */
-        #map {
-            height: calc(70vh);
-            width: 100%;
-            margin-top: 10px;
-            max-width: 1200px;
-            border-radius: 8px;
-            overflow: hidden;
+        /* --- Layout Structures --- */
+        .w-100 { width: 100%; margin-bottom: 16px; }
+
+        .input-row {
+            display: flex; align-items: center; gap: 12px; margin-bottom: 16px; width: 100%;
         }
 
-        /* Controls */
+        .flex-input { flex-grow: 1; margin-bottom: 0 !important; }
+
+        md-filled-tonal-button.route-btn {
+            --md-filled-tonal-button-container-height: auto;
+            padding-top: 10px; padding-bottom: 10px; margin-bottom: 8px; text-align: left;
+        }
+
+        /* --- Desktop Layout --- */
+        #app-container {
+            display: flex; flex-direction: row; align-items: flex-start; padding: 24px; height: 100vh; box-sizing: border-box;
+        }
+
         #controls {
-            display: flex;
-            flex-direction: column;
-            width: 100%;
-            max-width: var(--control-width);
-            background: rgba(255,255,255,0.95);
-            border-radius: 12px;
-            padding: 12px;
-            box-shadow: 0 6px 18px rgba(0,0,0,0.08);
-            box-sizing: border-box;
+            width: var(--control-width); flex: 0 0 var(--control-width);
+            background: var(--md-sys-color-surface); border-radius: 24px; padding: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+            box-sizing: border-box; display: flex; flex-direction: column;
+            max-height: calc(100vh - 48px); overflow-y: auto;
         }
 
-        #controls > * {
-          margin: 10px 0;
+        #resizer {
+            width: 24px; cursor: col-resize; display: flex; align-items: center; justify-content: center; flex-shrink: 0; height: 80vh;
         }
 
-        #controls input, #controls button {
-            padding: 12px;
-            font-size: 16px;
-            border-radius: 8px;
-            border: 1px solid #ddd;
-            background: #fff;
-            width: 100%;
-            box-sizing: border-box;
-            touch-action: manipulation;
+        .resizer-pill {
+            width: 4px; height: 48px; background: var(--md-sys-color-primary); border-radius: 4px; opacity: 0.3; transition: opacity 0.2s ease, transform 0.2s ease;
         }
 
-        #routeOptions button {
-            display: block;
-            margin: 6px 0;
-            padding: 10px;
-            cursor: pointer;
-            background: #f6f6f6;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            text-align: left;
-            width: 100%;
+        #resizer:hover .resizer-pill, #resizer:active .resizer-pill {
+            opacity: 0.8; transform: scaleX(1.5);
         }
 
-        #result {
-            font-size: 16px;
-            font-weight: 600;
-            margin-top: 8px;
+        #right-content {
+            flex-grow: 1; display: flex; flex-direction: column; height: 80vh;
         }
 
-        /* Mobile-specific behaviour */
+        #map {
+            flex-grow: 1; width: 100%; border-radius: 24px; overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); background: var(--map-bg);
+        }
+
+        .mobile-only { display: none; }
+        #routeOptions { margin-top: 16px; }
+        #routeOptions h3 { font-size: 1rem; font-weight: 500; margin-bottom: 12px; }
+        #result { font-size: 1.15rem; font-weight: 500; margin-top: 20px; color: var(--md-sys-color-primary); text-align: center; }
+
+        /* --- Mobile Layout --- */
         @media (max-width: 899px) {
-            /* keep page padding smaller on mobile */
-            body {
-                padding: 8px;
-                /* ensure column flow so map can flex-grow */
-                display: flex;
-                flex-direction: column;
-                min-height: 100vh;
+            #app-container { flex-direction: column; padding: 12px; height: auto; min-height: 100vh; }
+            #controls { width: 100%; max-width: none; flex: none; max-height: none; margin-bottom: 16px; }
+            #resizer { display: none; }
+            #right-content { width: 100%; height: auto; }
+            .mobile-only { display: flex; }
+
+            #mobile-map-header { justify-content: flex-end; margin-bottom: 12px; padding-right: 8px; }
+
+            .google-pill-btn {
+                display: flex; align-items: center; gap: 8px;
+                background: var(--md-sys-color-surface); color: var(--text-color);
+                border: 1px solid var(--pill-border); padding: 6px 16px; border-radius: 50px;
+                font-family: inherit; font-weight: 500; font-size: 14px; cursor: pointer;
+                box-shadow: 0 1px 2px rgba(0,0,0,0.1); transition: background 0.2s ease;
             }
 
-            /* Controls sit in the normal flow (not fixed) so they push the map down */
-            #controls {
-                position: static;    /* <-- changed: no longer fixed */
-                left: auto;
-                right: auto;
-                bottom: auto;
-                z-index: 30;
-                width: 100%;
-                max-width: none;
-                padding: 12px;
-                margin: 0 0 12px 0;   /* give space below controls */
-                background: rgba(255,255,255,0.96);
-                box-shadow: 0 6px 18px rgba(0,0,0,0.06);
-                border-radius: 12px;
-            }
+            .google-pill-btn:active { opacity: 0.7; }
+            .google-pill-btn .material-symbols-outlined { font-size: 20px; }
 
-            /* Let the map take remaining vertical space instead of being overlapped */
-            #map {
-                flex: 1 1 auto;
-                min-height: 0; /* allow it to shrink inside the flex container */
-                height: auto;  /* override fixed/calculated heights */
-                margin-top: 0;
-                border-radius: 8px;
-            }
-
-            /* Larger clickable areas on mobile */
-            #controls input, #controls button, #routeOptions button {
-                padding: 14px;
-                font-size: 17px;
-            }
-
-            #routeOptions {
-                max-height: 180px;
-                overflow-y: auto;
-            }
-        }
-
-        /* Tiny screens */
-        @media (max-width: 420px) {
-            #map {
-                height: calc(100vh - 220px);
-            }
-            #controls input, #controls button, #routeOptions button {
-                font-size: 16px;
-                padding: 12px;
-            }
+            #map { height: 50vh; transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease; }
+            #map.collapsed { height: 0; opacity: 0; box-shadow: none; }
         }
     </style>
 </head>
 <body>
-    <div id="controls">
-        <input id="start" type="text" placeholder="Start location">
-        <input id="end" type="text" placeholder="End location">
-        <input id="dateTime" type="datetime-local">
-        <button onclick="findBusRoutes()">Find Bus Routes</button>
-        <div id="routeOptions"></div>
-        <div id="result"></div>
+
+    <div id="app-container">
+        <div id="controls">
+            <h2 class="panel-title">Bus Sun Side Finder</h2>
+
+            <div class="input-row">
+                <md-outlined-text-field id="start" label="Start location" class="flex-input"></md-outlined-text-field>
+                <md-icon-button onclick="getCurrentLocation('start')" title="Use Current Location">
+                    <md-icon>my_location</md-icon>
+                </md-icon-button>
+            </div>
+
+            <div class="input-row">
+                <md-outlined-text-field id="end" label="End location" class="flex-input"></md-outlined-text-field>
+                <md-icon-button onclick="getCurrentLocation('end')" title="Use Current Location">
+                    <md-icon>my_location</md-icon>
+                </md-icon-button>
+            </div>
+
+            <md-outlined-text-field id="dateTime" type="datetime-local" label="Departure Time" class="w-100"></md-outlined-text-field>
+
+            <md-filled-button class="w-100" id="findBtn">Find Bus Routes</md-filled-button>
+
+            <div id="result"></div>
+            <div id="routeOptions"></div>
+        </div>
+
+        <div id="resizer">
+            <div class="resizer-pill"></div>
+        </div>
+        
+        <div id="right-content">
+            <div id="mobile-map-header" class="mobile-only">
+                <button id="toggleMapBtn" class="google-pill-btn">
+                    <span class="material-symbols-outlined" id="toggleMapIcon">visibility_off</span>
+                    <span id="toggleMapText">Hide Map</span>
+                </button>
+            </div>
+            <div id="map"></div>
+        </div>
     </div>
-    <div id="map"></div>
 
     <script>
-        let map, directionsService, directionsRenderer;
+        let map, directionsService, directionsRenderer, geocoder;
         let currentTravelTime;
 
+        // Standard Google Maps dark theme JSON
+        const darkMapStyle = [
+            { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+            { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+            { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+            { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+            { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+            { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#263c3f" }] },
+            { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#6b9a76" }] },
+            { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
+            { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#212a37" }] },
+            { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#9ca5b3" }] },
+            { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#746855" }] },
+            { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1f2835" }] },
+            { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#f3d19c" }] },
+            { featureType: "transit", elementType: "geometry", stylers: [{ color: "#2f3948" }] },
+            { featureType: "transit.station", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+            { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] },
+            { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#515c6d" }] },
+            { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#17263c" }] }
+        ];
+
         function initMap() {
+            // Check if the user's OS is using dark mode
+            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+
             map = new google.maps.Map(document.getElementById("map"), {
                 center: { lat: 37.7749, lng: -122.4194 },
-                zoom: 13
+                zoom: 13,
+                mapTypeControl: false,
+                styles: prefersDark ? darkMapStyle : [] // Apply dark map if OS is dark
             });
+
+            // Listen for system theme changes in real-time
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+                map.setOptions({ styles: event.matches ? darkMapStyle : [] });
+            });
+
             directionsService = new google.maps.DirectionsService();
             directionsRenderer = new google.maps.DirectionsRenderer({ map: map });
+            geocoder = new google.maps.Geocoder();
 
-            new google.maps.places.Autocomplete(document.getElementById("start"));
-            new google.maps.places.Autocomplete(document.getElementById("end"));
+            initAutocomplete('start');
+            initAutocomplete('end');
+
+            document.getElementById("findBtn").addEventListener("click", findBusRoutes);
         }
+
+        async function initAutocomplete(fieldId) {
+            const field = document.getElementById(fieldId);
+            await customElements.whenDefined('md-outlined-text-field');
+            
+            setTimeout(() => {
+                const innerInput = field.shadowRoot ? field.shadowRoot.querySelector('input') : null;
+                if (innerInput) {
+                    const autocomplete = new google.maps.places.Autocomplete(innerInput);
+                    autocomplete.addListener('place_changed', () => {
+                        field.value = innerInput.value;
+                    });
+                }
+            }, 250);
+        }
+
+        function getCurrentLocation(fieldId) {
+            if (navigator.geolocation) {
+                const field = document.getElementById(fieldId);
+                field.value = "Locating...";
+
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+                        
+                        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+                            if (status === "OK" && results[0]) {
+                                field.value = results[0].formatted_address;
+                            } else {
+                                field.value = `${lat}, ${lng}`;
+                            }
+                        });
+                    },
+                    (error) => {
+                        alert("Unable to retrieve your location. Please ensure location permissions are granted.");
+                        field.value = "";
+                    }
+                );
+            } else {
+                alert("Geolocation is not supported by your browser.");
+            }
+        }
+
+        // Drag to Resize Feature
+        const resizer = document.getElementById('resizer');
+        let isResizing = false;
+
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none'; 
+            e.preventDefault();
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const newWidth = Math.max(300, Math.min(e.clientX - 24, 600)); 
+            document.documentElement.style.setProperty('--control-width', `${newWidth}px`);
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
+        });
+
+        // Mobile Map Toggle Feature
+        const toggleMapBtn = document.getElementById('toggleMapBtn');
+        const toggleMapIcon = document.getElementById('toggleMapIcon');
+        const toggleMapText = document.getElementById('toggleMapText');
+        const mapElement = document.getElementById('map');
+        let mapVisible = true;
+
+        toggleMapBtn.addEventListener('click', () => {
+            mapVisible = !mapVisible;
+            if (mapVisible) {
+                mapElement.classList.remove('collapsed');
+                toggleMapIcon.textContent = 'visibility_off';
+                toggleMapText.textContent = 'Hide Map';
+            } else {
+                mapElement.classList.add('collapsed');
+                toggleMapIcon.textContent = 'map';
+                toggleMapText.textContent = 'Show Map';
+            }
+        });
 
         function findBusRoutes() {
             const start = document.getElementById("start").value;
             const end = document.getElementById("end").value;
-            currentTravelTime = new Date(document.getElementById("dateTime").value);
+            const dateTimeVal = document.getElementById("dateTime").value;
+            
+            if (!start || !end || !dateTimeVal) {
+                alert("Please fill in all fields.");
+                return;
+            }
+
+            currentTravelTime = new Date(dateTimeVal);
+            document.getElementById("result").innerText = ""; 
 
             directionsService.route({
                 origin: start,
@@ -209,6 +381,9 @@
             }, (result, status) => {
                 if (status === 'OK') {
                     showRouteOptions(result);
+                    if (!mapVisible && window.innerWidth < 900) {
+                        toggleMapBtn.click();
+                    }
                 } else {
                     alert("Directions request failed: " + status);
                 }
@@ -222,12 +397,15 @@
 
             routes.forEach((route, i) => {
                 const leg = route.legs[0];
-                const btn = document.createElement("button");
-                btn.textContent = `${route.summary || "Bus route"} — ${leg.duration.text}, departs ${leg.departure_time?.text || "?"}`;
-                btn.onclick = () => {
+                const btn = document.createElement("md-filled-tonal-button");
+                btn.className = "w-100 route-btn";
+                btn.innerHTML = `${route.summary || "Bus route"} — ${leg.duration.text}, departs ${leg.departure_time?.text || "?"}`;
+
+                btn.addEventListener('click', () => {
                     directionsRenderer.setDirections({ ...result, routes: [route] });
                     runSunCalcOnRoute(route, currentTravelTime);
-                };
+                });
+                
                 optionsDiv.appendChild(btn);
             });
         }
@@ -239,18 +417,17 @@
 
             leg.steps.forEach(step => {
                 if (step.travel_mode === 'TRANSIT') {
-                    const stepDuration = step.duration.value; // seconds
+                    const stepDuration = step.duration.value;
                     const poly = google.maps.geometry.encoding.decodePath(step.polyline.points);
 
                     for (let i = 0; i < poly.length - 1; i++) {
                         path.push({
                             start: [poly[i].lat(), poly[i].lng()],
                             end: [poly[i+1].lat(), poly[i+1].lng()],
-                            duration: stepDuration / (poly.length - 1) // evenly split
+                            duration: stepDuration / (poly.length - 1)
                         });
                     }
                 } else {
-                    // Walking or waiting segments advance the clock but don't matter for bus sunlight
                     accumulatedTime = new Date(accumulatedTime.getTime() + step.duration.value * 1000);
                 }
             });
@@ -267,14 +444,12 @@
                 const bearing = calculateBearing(seg.start, seg.end);
                 const sunPos = SunCalc.getPosition(currentTime, seg.start[0], seg.start[1]);
                 const sunAzimuth = (sunPos.azimuth * 180 / Math.PI + 180) % 360;
-
                 const relativeAngle = ((sunAzimuth - bearing + 360) % 360);
 
-                // FIX: swapped logic from earlier version
                 if (relativeAngle > 90 && relativeAngle < 270) {
-                    rightWeight += seg.duration; // Sun is on left → sit right
+                    rightWeight += seg.duration;
                 } else {
-                    leftWeight += seg.duration; // Sun is on right → sit left
+                    leftWeight += seg.duration;
                 }
 
                 currentTime = new Date(currentTime.getTime() + seg.duration * 1000);
