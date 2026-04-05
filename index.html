@@ -35,6 +35,7 @@
 
             --md-sys-color-surface: #fdfdfd;
             --md-sys-color-surface-container: #eff4f4;
+            --md-sys-color-surface-variant: #e1e3e3;
 
             --md-sys-color-on-surface: #191c1d;
             --md-sys-color-on-surface-variant: #3f484a;
@@ -59,6 +60,7 @@
 
                 --md-sys-color-surface: #1e1e1e;
                 --md-sys-color-surface-container: #121212;
+                --md-sys-color-surface-variant: #2a2f31;
 
                 --md-sys-color-on-surface: #e1e3e3;
                 --md-sys-color-on-surface-variant: #bfc8ca;
@@ -103,6 +105,58 @@
             padding-top: 10px; padding-bottom: 10px; margin-bottom: 8px; text-align: left;
         }
 
+        /* --- Animated Segmented Pill UI --- */
+        #recommendation-container {
+            display: none;
+            margin-top: 24px;
+        }
+
+        .pill-track {
+            position: relative;
+            display: flex;
+            background: var(--md-sys-color-surface-variant);
+            border-radius: 999px;
+            height: 48px;
+            overflow: hidden;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .pill-indicator {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            width: 50%;
+            background: var(--md-sys-color-secondary-container);
+            border-radius: 999px;
+            /* Smooth cubic-bezier for that native Google feel */
+            transition: transform 0.6s cubic-bezier(0.2, 0, 0, 1); 
+            z-index: 1;
+        }
+
+        .pill-label {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2;
+            font-weight: 500;
+            font-size: 1rem;
+            color: var(--md-sys-color-on-surface-variant);
+            transition: color 0.3s ease;
+        }
+
+        .pill-label span {
+            margin-left: 8px;
+            font-size: 0.85rem;
+            opacity: 0.8;
+            font-weight: 400;
+        }
+
+        .pill-label.active-label {
+            color: var(--md-sys-color-on-secondary-container);
+        }
+
         /* --- Google Maps Autocomplete Material 3 Overrides --- */
         .pac-container {
             background-color: var(--md-sys-color-surface);
@@ -128,11 +182,8 @@
             font-size: 16px;
             color: var(--md-sys-color-on-surface);
         }
-        /* Hide the default Google logo on dark mode to prevent ugly white box */
         @media (prefers-color-scheme: dark) {
-            .pac-logo:after {
-                display: none;
-            }
+            .pac-logo:after { display: none; }
         }
 
         /* --- Desktop Layout --- */
@@ -172,7 +223,6 @@
         .mobile-only { display: none; }
         #routeOptions { margin-top: 16px; }
         #routeOptions h3 { font-size: 1rem; font-weight: 500; margin-bottom: 12px; }
-        #result { font-size: 1.15rem; font-weight: 500; margin-top: 20px; color: var(--md-sys-color-primary); text-align: center; }
 
         /* --- Mobile Layout --- */
         @media (max-width: 899px) {
@@ -229,7 +279,18 @@
 
             <md-filled-button class="w-100" id="findBtn">Find Bus Routes</md-filled-button>
 
-            <div id="result"></div>
+            <div id="recommendation-container">
+                <div class="pill-track">
+                    <div class="pill-indicator" id="pill-indicator"></div>
+                    <div class="pill-label" id="label-left">
+                        Left <span id="pct-left">--%</span>
+                    </div>
+                    <div class="pill-label" id="label-right">
+                        Right <span id="pct-right">--%</span>
+                    </div>
+                </div>
+            </div>
+
             <div id="routeOptions"></div>
         </div>
 
@@ -340,11 +401,10 @@
             }
         }
 
-        // --- NEW: Function to set current time formatting for datetime-local ---
         function setCurrentTime() {
             const now = new Date();
-            const offset = now.getTimezoneOffset() * 60000; // Get local timezone offset in ms
-            const localISOTime = (new Date(now - offset)).toISOString().slice(0, 16); // Format to YYYY-MM-DDThh:mm
+            const offset = now.getTimezoneOffset() * 60000;
+            const localISOTime = (new Date(now - offset)).toISOString().slice(0, 16); 
             document.getElementById('dateTime').value = localISOTime;
         }
 
@@ -402,7 +462,9 @@
             }
 
             currentTravelTime = new Date(dateTimeVal);
-            document.getElementById("result").innerText = ""; 
+            
+            // Hide the animated container initially when fetching new routes
+            document.getElementById("recommendation-container").style.display = "none";
 
             directionsService.route({
                 origin: start,
@@ -429,8 +491,6 @@
 
             routes.forEach((route, i) => {
                 const leg = route.legs[0];
-
-                // --- NEW: Extracting the actual bus number from the transit steps ---
                 const transitSteps = leg.steps.filter(step => step.travel_mode === 'TRANSIT');
                 const busNumbers = transitSteps.map(step => step.transit.line.short_name || step.transit.line.name).join(' -> ');
                 const routeName = busNumbers ? `Bus ${busNumbers}` : (route.summary || "Bus route");
@@ -470,11 +530,10 @@
                 }
             });
 
-            const bestSide = weightedSideRecommendation(path, travelTime);
-            document.getElementById("result").innerText = `Recommended Side: ${bestSide}`;
+            calculateAndAnimateSide(path, travelTime);
         }
 
-        function weightedSideRecommendation(segments, startTime) {
+        function calculateAndAnimateSide(segments, startTime) {
             let leftWeight = 0, rightWeight = 0;
             let currentTime = new Date(startTime);
 
@@ -489,13 +548,42 @@
                 } else {
                     leftWeight += seg.duration;
                 }
-
                 currentTime = new Date(currentTime.getTime() + seg.duration * 1000);
             }
 
-            if (leftWeight > rightWeight) return "Left";
-            if (rightWeight > leftWeight) return "Right";
-            return "Either";
+            const totalWeight = leftWeight + rightWeight;
+            let leftPct = 50, rightPct = 50;
+
+            if (totalWeight > 0) {
+                leftPct = Math.round((leftWeight / totalWeight) * 100);
+                rightPct = 100 - leftPct;
+            }
+
+            // --- Update UI with animations ---
+            const container = document.getElementById("recommendation-container");
+            const indicator = document.getElementById("pill-indicator");
+            const lblLeft = document.getElementById("label-left");
+            const lblRight = document.getElementById("label-right");
+            
+            document.getElementById("pct-left").innerText = `${leftPct}%`;
+            document.getElementById("pct-right").innerText = `${rightPct}%`;
+
+            container.style.display = "block";
+            lblLeft.classList.remove('active-label');
+            lblRight.classList.remove('active-label');
+
+            // Force a reflow so the transition works if display was just set to block
+            void container.offsetWidth; 
+
+            if (leftPct > rightPct) {
+                indicator.style.transform = 'translateX(0%)';
+                lblLeft.classList.add('active-label');
+            } else if (rightPct > leftPct) {
+                indicator.style.transform = 'translateX(100%)';
+                lblRight.classList.add('active-label');
+            } else {
+                indicator.style.transform = 'translateX(50%)'; // Ties sit in the middle
+            }
         }
 
         function calculateBearing(start, end) {
